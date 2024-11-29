@@ -4,13 +4,18 @@ const URL_BASE = 'http://localhost:8080/clientes'
 const INSERT_STATE = 0
 const EDIT_STATE   = 1
 
+let clientes = []
+
 $(document).ready(() => {
     $('header').append(getNavBar())
 
     function FetchRegistros() {
         fetch(URL_BASE)
             .then((res) => res.json())
-            .then((dados) => GerarGrid(dados))
+            .then((dados) => {
+                clientes = dados
+                GerarGrid(clientes)
+            })
             .catch(console.error)
     }
 
@@ -211,6 +216,55 @@ $(document).ready(() => {
             }
         })
     })
+
+    function FiltrarClientes() {
+        let searchType = $('#search-type').val()
+        let searchTerm = $('#search-input').val().trim().toLowerCase()
+
+        if (searchTerm === '') {
+            GerarGrid(clientes)
+        } else {
+            let filteredClientes = clientes.filter(cliente => {
+                if (searchType === 'nome') {
+                    return cliente.nome.toLowerCase().includes(searchTerm)
+                } else if (searchType === 'cpf') {
+                    let clienteCpf = cliente.cpf.replace(/[^\d]/g, '')
+                    let searchCpf = searchTerm.replace(/[^\d]/g, '')
+                    return clienteCpf.includes(searchCpf)
+                }
+                return false
+            })
+            GerarGrid(filteredClientes)
+        }
+    }
+
+    $('#search-input').on('input', function() {
+        FiltrarClientes()
+    })
+
+    function maskCPFSearch() {
+        let value = $(this).val()
+        value = value.replace(/\D/g, '')
+        value = value.replace(/(\d{3})(\d)/, '$1.$2')
+        value = value.replace(/(\d{3})(\d)/, '$1.$2')
+        value = value.replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+        $(this).val(value)
+    }
+
+    $('#search-type').on('change', function() {
+        let searchType = $(this).val()
+        $('#search-input').val('') // Limpa o campo de pesquisa ao trocar o tipo
+        if (searchType === 'cpf') {
+            $('#search-input').attr('maxlength', '14')
+            $('#search-input').on('input', maskCPFSearch)
+        } else {
+            $('#search-input').removeAttr('maxlength')
+            $('#search-input').off('input', maskCPFSearch)
+        }
+        FiltrarClientes()
+    })
+
+    $('#search-type').trigger('change')
 
     FetchRegistros()
 })
