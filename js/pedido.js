@@ -12,20 +12,25 @@ const status = {
     "CANCELADO": "Pedido Cancelado ☹️"
 }
 
+let clientesData = [];
+
 $(document).ready(() => {
   $('header').append(getNavBar())
 
   function FetchRegistros() {
     fetch(URL_CLIENTES)
       .then((res) => res.json())
-      .then((dados) => GerarGrid(dados))
+      .then((dados) => {
+        clientesData = dados
+        GerarGrid(dados)
+      })
       .catch(console.error)
   }
 
   function GerarGrid(clientes) {
     let tableBody = $('#body-table');
     tableBody.empty();
-  
+
     clientes.forEach(cliente => {
       cliente.pedidos.forEach(pedido => {
         tableBody.append(`
@@ -35,36 +40,42 @@ $(document).ready(() => {
             <td>${status[pedido.status]}</td>
             <td>${cliente.nome}</td>
             <td>
-              <button type="button" class="btn btn-outline-danger btn-sm edit" data-id="${pedido.id}" data-bs-toggle="modal" data-bs-target="#pedido-modal">
+              <button type="button" class="btn btn-outline-danger btn-sm edit" data-id="${pedido.id}" data-cliente-id="${cliente.id}" data-bs-toggle="modal" data-bs-target="#pedido-modal">
                 <i class="bi bi-pen"></i>
               </button>
               <button type="button" class="btn btn-outline-danger btn-sm delete" data-id="${pedido.id}" data-bs-toggle="modal" data-bs-target="#confirm-delete">
                 <i class="bi bi-trash"></i>
               </button>
             </td>
-          </tr>    
+          </tr>
         `);
       });
     });
   }
 
   function LoadClientes(selectedClienteId = null) {
-    fetch(URL_CLIENTES)
-      .then(res => res.json())
-      .then(clientes => {
-        let clienteSelect = $('#pedido-cliente')
-        clienteSelect.empty()
-        clienteSelect.append('<option value="">Selecione um cliente</option>')
-        clientes.forEach(cliente => {
-          let selected = cliente.id == selectedClienteId ? 'selected' : ''
-          clienteSelect.append(`
-            <option value="${cliente.id}" ${selected} data-id="${cliente.id}">
-              ${cliente.nome} - <small>${cliente.cpf}</small>
-            </option>
-          `)
+    return new Promise((resolve, reject) => {
+      fetch(URL_CLIENTES)
+        .then(res => res.json())
+        .then(clientes => {
+          let clienteSelect = $('#pedido-cliente');
+          clienteSelect.empty();
+          clienteSelect.append('<option value="">Selecione um cliente</option>');
+          clientes.forEach(cliente => {
+            let selected = cliente.id == selectedClienteId ? 'selected' : '';
+            clienteSelect.append(`
+              <option value="${cliente.id}" ${selected} data-id="${cliente.id}">
+                ${cliente.nome} - <small>${cliente.cpf}</small>
+              </option>
+            `);
+          });
+          resolve();
         })
-      })
-      .catch(console.error)
+        .catch(err => {
+          console.error(err);
+          reject(err);
+        });
+    });
   }
 
   $('#pedido-valor').on('input', function() {
@@ -90,53 +101,61 @@ $(document).ready(() => {
     LoadClientes()
   })
 
-  $(document).on('click', '.edit', function() {
-    let pedidoId = $(this).data("id")
+  $(document).on('click', '.edit', function () {
+    let pedidoId  = $(this).data("id");
+    let clienteId = $(this).data("cliente-id");
 
-    fetch(`${URL_BASE}/${pedidoId}`)
-      .then(res => res.json())
-      .then(pedido => {
-        $('#pedido-descricao').val(pedido.descricao)
-        $('#pedido-valor').val(pedido.valor.toFixed(2).replace('.', ','))
-        $('#pedido-status').val(pedido.status)
+    let cliente = clientesData.find(c => c.id === clienteId);
+    if (!cliente) {
+      alert("Cliente não encontrado");
+      return;
+    }
 
-        $('#pedido-modal-label').text('Editar Pedido')
-
-        $('#pedido-form').attr('data-id', pedidoId)
-        $('#pedido-form').attr('data-state', EDIT_STATE)
-
-        LoadClientes(pedido.cliente.id)
-      })
-      .catch(console.error)
-  })
-
-  $('#save-pedido').on('click', () => {
-    let id = ""
-    let descricao = $('#pedido-descricao').val().trim()
-    let valor = $('#pedido-valor').val().trim()
-    let status = $('#pedido-status').val()
-    let clienteId = $('#pedido-cliente option:selected').data('id')
-
-    if (!descricao || !valor || !status || !clienteId) {
-      alert('Por favor, preencha todos os campos obrigatórios.')
+    let pedido = cliente.pedidos.find(p => p.id === pedidoId);
+    if (!pedido) {
+      alert("Pedido não encontrado")
       return
     }
 
-    valor = valor.replace(/\./g, '').replace(',', '.')
+    $('#pedido-descricao').val(pedido.descricao)
+    $('#pedido-valor').val(pedido.valor.toFixed(2).replace('.', ','))
+    $('#pedido-status').val(pedido.status)
 
-    let state  = $('#pedido-form').attr('data-state')
-    let url    = URL_BASE
-    let method = 'POST'
+    $('#pedido-modal-label').text('Editar Pedido')
+
+    $('#pedido-form').attr('data-id', pedidoId)
+    $('#pedido-form').attr('data-state', EDIT_STATE)
+
+    LoadClientes(clienteId)
+  });
+
+  $('#save-pedido').on('click', () => {
+    let id = "";
+    let descricao = $('#pedido-descricao').val().trim();
+    let valor = $('#pedido-valor').val().trim();
+    let status = $('#pedido-status').val();
+    let clienteId = $('#pedido-cliente option:selected').data('id');
+
+    if (!descricao || !valor || !status || !clienteId) {
+      alert('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    valor = valor.replace(/\./g, '').replace(',', '.');
+
+    let state = $('#pedido-form').attr('data-state');
+    let url = URL_BASE;
+    let method = 'POST';
 
     if (state == EDIT_STATE) {
-      id     = $('#pedido-form').attr('data-id')
-      method = 'PUT'
+      id = $('#pedido-form').attr('data-id');
+      method = 'PUT';
     }
 
     $.ajax({
       url: url,
       method: method,
-      contentType: 'application/json', 
+      contentType: 'application/json',
       data: JSON.stringify({
         id: id,
         descricao: descricao,
@@ -157,8 +176,8 @@ $(document).ready(() => {
         }
         alert(errorMessage)
       }
-    })
-  })
+    });
+  });
 
   $(document).on('click', '.delete', function() {
     let pedidoId = $(this).data("id")
